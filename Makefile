@@ -22,7 +22,7 @@ ipq8065-sqrbug: $(HEADERS) $(objs) Makefile
 	+$(CC) $(LDFLAGS) -o $@$(EXEEXT) $(objs)
 
 ipq8065-sqrbug.lst: ipq8065-sqrbug
-	$(OBJDUMP) -D $< ipq8065-sqrbug > $@
+	$(OBJDUMP) -D $< > $@
 
 clean:
 	@rm -f $(objs)
