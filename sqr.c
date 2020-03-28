@@ -1,59 +1,128 @@
 #include "includes.h"
 
-volatile mp_word SqrResult[148];
-
-void __attribute__ ((noinline)) __attribute__((optimize("O0"))) dummy_func() {
-}
+#define USE_ASSEMBLY_VERSION
 
 /*
- * Test function to square an array of numbers that fails
- * intermittently on my Netgear X4S R7800. This code is from the
- * libtommath library, which is used by the openwrt dropbear app which
- * produce the original symptom - failed SSH logins due to the wrong
- * cyrpto signature of the host key.
+ * Test function to produce memory read corruption intermittently on my Netgear
+ * X4S R7800. This code is from the libtommath library (fast_s_mp_sqr
+ * function), which is used by the openwrt dropbear app that produce the
+ * original symptom - failed SSH logins due to the wrong cyrpto signature of
+ * the host key.
  *
- * This logic has been modified to elminate all elements not essential
- * to produce failure, including some aspects of the original squaring
- * logic, so it's not performing same operations as the original
- * version. Also, instead of the final squared data output we use the
- * intermediate data for validation of the result, which is simpler to
- * evaluate and is just after the squaring loop that yields the wrong
- * data.
+ * This logic has been modified to elminate all elements not essential to
+ * produce failure, including changing the sqauring option (multiply and adds)
+ * to a simple bitwise OR, and to reduce the data size to a single 32-bit word
+ * instead of 64-bit. This was done to make debugging the corruption easier,
+ * including finding where the corrupt data came from.
  *
- * To match the original failing function's behavior it's necessary to
- * specify certain local variables as register vars and also to invoke
- * a dummy func - these are both used to control GCC's register
- * allocations to get the assembly output in a form that produces the
- * issue.
- *
- * The issue on my router is likely a faulty IPQ8065 or memory issue,
- * but I wrote this app to have other tests theirs to be sure.
- *
- * The issue is very sensitive to timing and somewhat sensitive to
- * data patterns, which implies a memory issue, either on the data or
- * address. For example this function can be made to fail must less
- * often by replacing the  placeholder "nop" instruction with an ARM
- * data-barrier instruction such as "dsb". The purpose of the
- * placeholder "nop" is to limit the difference between the failing
- * and non-failing versions of the function to a single instruction to
- * limit code movement
+ * Because the issue is very sensitive to the specific layout of instructions
+ * for the squaring loop I have pre-compiled the entire function. That way
+ * future recompiles wont cause the logic to suddenly stop failing. You
+ * can enable the C-language version below by commenting out the
+ * #define USE_ASSEMBLY_VERSION at the top of this file.
+ * 
+ * The issue on my router is likely a faulty IPQ8065 or memory issue, but I
+ * wrote this app to have other tests theirs to be sure. Note that the issue is
+ * very sensitive to timing
  */ 
-void fast_s_mp_sqr (mp_int * a, mp_int * b) {
 
-    int                 olduse, res, pa;
+#if defined(USE_ASSEMBLY_VERSION)
+#if !defined(DYNAMIC_MP_DP)
+    /* version when mp_int.dp is an array instantiated in the structure */ 
+void __attribute__ ((noinline)) fast_s_mp_sqr (mp_int * a, mp_int * b, mp_digit SqrResult[]) {
+    asm(".word 0xe92d43f0");    /* push     {r4, r5, r6, r7, r8, r9, lr} */
+    asm(".word 0xe1a04000"); 	/* mov	r4, r0                           */ 
+    asm(".word 0xe494500c"); 	/* ldr	r5, [r4], #12                    */
+    asm(".word 0xe3a0c000"); 	/* mov	ip, #0                           */
+    asm(".word 0xe1a05085"); 	/* lsl	r5, r5, #1                       */
+    asm(".word 0xe15c0005"); 	/* cmp	ip, r5                           */
+    asm(".word 0xa8bd83f0"); 	/* popge	{r4, r5, r6, r7, r8, r9, pc} */  
+    asm(".word 0xe590e000"); 	/* ldr	lr, [r0]                         */
+    asm(".word 0xe24e1001"); 	/* sub	r1, lr, #1                       */
+    asm(".word 0xe151000c"); 	/* cmp	r1, ip                           */
+    asm(".word 0xa1a0100c"); 	/* movge	r1, ip                       */
+    asm(".word 0xe2813001"); 	/* add	r3, r1, #1                       */
+    asm(".word 0xe04c6001"); 	/* sub	r6, ip, r1                       */
+    asm(".word 0xe0847101"); 	/* add	r7, r4, r1, lsl #2               */
+    asm(".word 0xe041100c"); 	/* sub	r1, r1, ip                       */
+    asm(".word 0xe08ee001"); 	/* add	lr, lr, r1                       */
+    asm(".word 0xe15e0003"); 	/* cmp	lr, r3                           */
+    asm(".word 0xe0846106"); 	/* add	r6, r4, r6, lsl #2               */
+    asm(".word 0xa1a0e003"); 	/* movge	lr, r3                       */
+    asm(".word 0xe0833001"); 	/* dd	r3, r3, r1                       */
+    asm(".word 0xe1a030c3"); 	/* asr	r3, r3, #1                       */
+    asm(".word 0xe153000e"); 	/* cmp	r3, lr                           */
+    asm(".word 0xa1a0300e"); 	/* movge	r3, lr                       */ 
+    asm(".word 0xe320f000"); 	/* nop	{0}                              */
+    asm(".word 0xe3a01000"); 	/* mov	r1, #0                           */
+    asm(".word 0xe1a0e001"); 	/* mov	lr, r1                           */
+    asm(".word 0xe15e0003"); 	/* cmp	lr, r3                           */
+    asm(".word 0xa782110c"); 	/* strge	r1, [r2, ip, lsl #2]         */
+    asm(".word 0xa28cc001"); 	/* addge	ip, ip, #1                   */
+    asm(".word 0xaaffffe6"); 	/* bge	8fc <fast_s_mp_sqr+0x14>         */
+    asm(".word 0xe796810e"); 	/* ldr	r8, [r6, lr, lsl #2]             */
+    asm(".word 0xe28ee001"); 	/* add	lr, lr, #1                       */
+    asm(".word 0xe4179004"); 	/* ldr	r9, [r7], #-4                    */
+    asm(".word 0xe1888009"); 	/* orr	r8, r8, r9                       */
+    asm(".word 0xe1811008"); 	/* orr	r1, r1, r8                       */
+    asm(".word 0xeafffff5"); 	/* b	950 <fast_s_mp_sqr+0x68>         */
+}
+#else
+    /*  version when mp_int.dp is an array instantiated in the structure */ 
+void __attribute__ ((noinline)) fast_s_mp_sqr (mp_int * a, mp_int * b, mp_digit SqrResult[]) {
+    asm(".word 0xe92d41f0");  /* push	{r4, r5, r6, r7, r8, lr}     */
+    asm(".word 0xe3a0c000");  /* mov	ip, #0                       */
+    asm(".word 0xe5905000");  /* ldr	r5, [r0]                     */
+    asm(".word 0xe1a05085");  /* lsl	r5, r5, #1                   */
+    asm(".word 0xe15c0005");  /* cmp	ip, r5                       */
+    asm(".word 0xa8bd81f0");  /* popge	{r4, r5, r6, r7, r8, pc}     */
+    asm(".word 0xe590e000");  /* ldr	lr, [r0]                     */
+    asm(".word 0xe590400c");  /* ldr	r4, [r0, #12]                */
+    asm(".word 0xe24e1001");  /* sub	r1, lr, #1                   */
+    asm(".word 0xe151000c");  /* cmp	r1, ip                       */
+    asm(".word 0xa1a0100c");  /* movge	r1, ip                       */
+    asm(".word 0xe04c6001");  /* sub	r6, ip, r1                   */
+    asm(".word 0xe2813001");  /* add	r3, r1, #1                   */
+    asm(".word 0xe0846106");  /* add	r6, r4, r6, lsl #2           */
+    asm(".word 0xe0844101");  /* add	r4, r4, r1, lsl #2           */
+    asm(".word 0xe041100c");  /* sub	r1, r1, ip                   */
+    asm(".word 0xe08ee001");  /* add	lr, lr, r1                   */
+    asm(".word 0xe15e0003");  /* cmp	lr, r3                       */
+    asm(".word 0xa1a0e003");  /* movge	lr, r3                       */
+    asm(".word 0xe0833001");  /* add	r3, r3, r1                   */
+    asm(".word 0xe1a030c3");  /* asr	r3, r3, #1                   */
+    asm(".word 0xe153000e");  /* cmp	r3, lr                       */
+    asm(".word 0xa1a0300e");  /* movge	r3, lr                       */
+    asm(".word 0xe320f000");  /* nop	{0}                          */
+    asm(".word 0xe3a01000");  /* mov	r1, #0                       */
+    asm(".word 0xe1a0e001");  /* mov	lr, r1                       */
+    asm(".word 0xe15e0003");  /* cmp	lr, r3                       */
+    asm(".word 0xa782110c");  /* strge	r1, [r2, ip, lsl #2]         */
+    asm(".word 0xa28cc001");  /* addge	ip, ip, #1                   */
+    asm(".word 0xaaffffe5");  /* bge	9e0 <fast_s_mp_sqr+0x10>     */
+    asm(".word 0xe796710e");  /* ldr	r7, [r6, lr, lsl #2]         */
+    asm(".word 0xe28ee001");  /* add	lr, lr, #1                   */
+    asm(".word 0xe4148004");  /* ldr	r8, [r4], #-4                */
+    asm(".word 0xe1877008");  /* orr	r7, r7, r8                   */
+    asm(".word 0xe1811007");  /* orr	r1, r1, r7                   */
+    asm(".word 0xeafffff5");  /* b	a38 <fast_s_mp_sqr+0x68>         */
+}
+#endif /* #else of #if defined(USE_ASSEMBLY_VERSION) */
+
+#else /* #if defined(USE_ASSEMBLY_VERSION) */
+void __attribute__ ((noinline)) fast_s_mp_sqr (mp_int * a, mp_int * b, mp_digit SqrResult[]) {
+
+    int                 pa;
     int                 ix;
     int                 iz;
-    mp_digit            W[MP_WARRAY], *tmpx;
-    register mp_word    W1 asm("d0");
+    mp_digit            *tmpx;
 
     pa = a->used + a->used;
-    dummy_func();
 
-    W1 = 0;
     for (ix = 0; ix < pa; ix++) { 
 
         int      tx, ty, iy;
-        register mp_word _W asm("d1");
+        mp_digit _W;
         mp_digit *tmpy;
 
         /* clear counter */
@@ -79,26 +148,20 @@ void fast_s_mp_sqr (mp_int * a, mp_int * b) {
         iy = MIN(iy, ((ty-tx)+1)>>1);
 
         /*
-         * placeholder "nop". if it's replaced with a dsb instruction
-         * the failure never occurs
+         * placeholder "nop", to experiment with various memory barrier instructions
          */
         asm("nop");
-        //asm("dsb");
-        //asm("dmb");
 
         /*
          * this is the "squaring loop" that intermittently
          * yields the wrong result
          */
         for (iz = 0; iz < iy; iz++) {
-            _W += ((mp_word)*tmpx++)*((mp_word)*tmpy--);
+            _W |= (*tmpx++)|(*tmpy--);
         }
-        // save intermediate result. used later by caller to check if failure occurred
+        // save result, which is used by caller to check if failure occurred
         SqrResult[ix] = _W; 
-
-        /* double the inner product and add carry */
-        _W = _W + _W + W1;
-
-        W[ix] = (mp_digit)(_W & MP_MASK); // original funcion storing of result
     }
 }
+#endif /* #else of #if defined(USE_ASSEMBLY_VERSION) */
+

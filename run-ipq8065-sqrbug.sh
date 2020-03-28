@@ -1,5 +1,5 @@
 #!/bin/sh
-echo Running ipq8065-sqrbug until it fails or after 1000 iterations
+echo Running ipq8065-sqrbug until it fails or 1000 successful iterations
 n=1
 until [ $n -ge 1000 ]
 do

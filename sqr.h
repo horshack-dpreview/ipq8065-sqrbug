@@ -8,15 +8,20 @@
 #define DIGIT_BIT   (28)
 #define MP_MASK     ((((mp_digit)1)<<((mp_digit)DIGIT_BIT))-((mp_digit)1)) /* result: 0x0FFFFFFF */
 
+//#define DYNAMIC_MP_DP
+
 typedef uint32_t mp_digit;
 typedef uint64_t mp_word;
 
 typedef struct  {
     int used, alloc, sign;
+#if !defined(DYNAMIC_MP_DP)
     mp_digit dp[148];
+#else
+    mp_digit *dp;
+#endif
 } mp_int;
 
-extern volatile mp_word SqrResult[148];
-extern void fast_s_mp_sqr (mp_int * a, mp_int * b);
+extern void fast_s_mp_sqr (mp_int * a, mp_int * b, mp_digit SqrResult[]);
 
 #endif /* #ifndef _INCL_SQR */

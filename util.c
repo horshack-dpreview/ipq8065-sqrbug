@@ -85,32 +85,3 @@ void hex_dump_32bit(const char *desc, void *addr, int bytes, int wordToHighlight
     fflush(stdout);
 }
 
-
-/*
- * Dumps a block of memory as 64-bit hex words
- */
-void hex_dump_64bit(const char *desc, void *addr, int bytes, int wordToHighlight) {
-    
-    int			wordIndex;
-    uint64_t 	*p = (uint64_t *)addr;
-
-    printf ("%s:\n", desc);
-    for (wordIndex = 0; wordIndex < bytes/8; wordIndex++) {
-        if ((wordIndex % 4) == 0) {
-            if (wordIndex != 0)
-                printf("\n");
-            //printf("  %04x ", wordIndex*sizeof(uint64_t)); 
-			printf ("%03d - %03d ", wordIndex, wordIndex+3);
-        }   
-        if (wordIndex % 4 == 2)
-            printf(" -");
-		//printf(" %016llx", p[wordIndex]);
-        if (wordIndex == wordToHighlight)
-            printf("*%08x:%08x", (uint32_t)(p[wordIndex]>>32), (uint32_t)p[wordIndex]);
-        else
-            printf(" %08x:%08x", (uint32_t)(p[wordIndex]>>32), (uint32_t)p[wordIndex]);
-    }   
-    printf("\n");
-    fflush(stdout);
-}
-
